@@ -1,0 +1,9 @@
+[project]
+name = "compitabi"
+version = "0.1.0"
+description = "Check which vLLM version first supports a HuggingFace model"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "requests",
+]
