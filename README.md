@@ -1,5 +1,7 @@
 # compitabi
 
+**https://peterableda.github.io/compitabi/**
+
 Answers the question: **"In which vLLM version is this HuggingFace model supported?"**
 
 Given a model ID like `meta-llama/Llama-3.2-11B-Vision-Instruct`, it fetches the model's architecture from the HuggingFace API and looks it up against a local cache of vLLM release history.
