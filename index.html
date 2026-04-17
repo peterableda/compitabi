@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>compitabi</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f5f5f5;
+      color: #111;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+    }
+
+    main {
+      background: #fff;
+      border: 1px solid #e0e0e0;
+      border-radius: 10px;
+      padding: 2.5rem;
+      width: 100%;
+      max-width: 560px;
+    }
+
+    h1 {
+      font-size: 1.4rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-bottom: 0.3rem;
+    }
+
+    .subtitle {
+      font-size: 0.9rem;
+      color: #666;
+      margin-bottom: 1.8rem;
+    }
+
+    textarea {
+      width: 100%;
+      padding: 0.6rem 0.8rem;
+      font-size: 0.85rem;
+      font-family: "SF Mono", "Fira Code", monospace;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      outline: none;
+      resize: vertical;
+      line-height: 1.6;
+      transition: border-color 0.15s;
+    }
+
+    textarea:focus { border-color: #555; }
+
+    .input-hint {
+      font-size: 0.75rem;
+      color: #999;
+      margin-top: 0.4rem;
+      margin-bottom: 0.75rem;
+    }
+
+    button {
+      width: 100%;
+      padding: 0.6rem 1.2rem;
+      font-size: 0.9rem;
+      font-weight: 600;
+      background: #111;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.15s;
+      white-space: nowrap;
+    }
+
+    button:hover { background: #333; }
+    button:disabled { background: #999; cursor: not-allowed; }
+
+    #result {
+      margin-top: 1.5rem;
+    }
+
+    .model-block {
+      padding: 0.75rem 0;
+      border-bottom: 1px solid #f0f0f0;
+    }
+
+    .model-block:last-child { border-bottom: none; }
+
+    .model-label {
+      font-family: "SF Mono", "Fira Code", monospace;
+      font-size: 0.8rem;
+      color: #888;
+      margin-bottom: 0.4rem;
+    }
+
+    .result-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 1rem;
+      padding: 0.2rem 0;
+    }
+
+    .arch {
+      font-family: "SF Mono", "Fira Code", monospace;
+      font-size: 0.85rem;
+      color: #333;
+    }
+
+    .version {
+      font-size: 0.85rem;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .version.supported { color: #1a7f37; }
+    .version.unsupported { color: #cf222e; }
+
+    .meta {
+      font-size: 0.75rem;
+      color: #999;
+      margin-top: 1rem;
+    }
+
+    .error {
+      font-size: 0.875rem;
+      color: #cf222e;
+    }
+
+    .spinner {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      border: 2px solid #ccc;
+      border-top-color: #555;
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+      vertical-align: middle;
+      margin-right: 0.4rem;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>compitabi</h1>
+    <p class="subtitle">Check which vLLM version first supports a HuggingFace model.</p>
+    <textarea id="model-input" rows="4" placeholder="meta-llama/Llama-3.2-11B-Vision-Instruct&#10;Phi-3.5-vision-instruct&#10;PixtralForConditionalGeneration" spellcheck="false"></textarea>
+    <p class="input-hint">One per line: org/model, bare model name, or architecture class. Ctrl+Enter to submit.</p>
+    <button id="check-btn">Check</button>
+    <div id="result"></div>
+  </main>
+
+  <script>
+    let cache = null;
+
+    async function loadCache() {
+      const res = await fetch("vllm_cache.json");
+      if (!res.ok) throw new Error("Failed to load vllm_cache.json");
+      cache = await res.json();
+    }
+
+    const ARCH_RE = /^[A-Z][a-zA-Z0-9]+(ForCausalLM|ForConditionalGeneration|ForSeq2SeqLM|ForTokenClassification|ForSequenceClassification|ForImageTextToText|ForSpeechSeq2Seq|ForVision2Seq|ForMaskedLM|Model)$/;
+
+    // If input has no "/", search HF to resolve to org/name
+    async function resolveModelId(input) {
+      if (input.includes("/")) return input;
+      const res = await fetch(`https://huggingface.co/api/models?search=${encodeURIComponent(input)}&limit=20`);
+      if (!res.ok) throw new Error(`HuggingFace search failed for: ${input}`);
+      const models = await res.json();
+      const match = models.find(m => m.modelId.split("/").pop().toLowerCase() === input.toLowerCase());
+      if (!match) throw new Error(`Could not resolve model: ${input}`);
+      return match.modelId;
+    }
+
+    async function getArchitectures(modelId) {
+      const res = await fetch(`https://huggingface.co/api/models/${modelId}`);
+      if (res.status === 404) throw new Error(`Model not found: ${modelId}`);
+      if (!res.ok) throw new Error(`HuggingFace API error: ${res.status}`);
+      const data = await res.json();
+      return data?.config?.architectures ?? [];
+    }
+
+    function resultBlock(label, archs) {
+      const rows = archs.map(arch => {
+        const version = cache.architectures[arch];
+        return `<div class="result-row">
+          <span class="arch">${arch}</span>
+          <span class="version ${version ? "supported" : "unsupported"}">${version ? `first in ${version}` : "not supported"}</span>
+        </div>`;
+      }).join("");
+      return `<div class="model-block"><div class="model-label">${label}</div>${rows}</div>`;
+    }
+
+    function setResult(html) {
+      document.getElementById("result").innerHTML = html;
+    }
+
+    async function checkOne(input) {
+      // Direct architecture name — skip HF lookup entirely
+      if (ARCH_RE.test(input)) {
+        return resultBlock(input, [input]);
+      }
+
+      const resolved = await resolveModelId(input);
+      const archs = await getArchitectures(resolved);
+      if (!archs.length) throw new Error(`No architectures found in HuggingFace config`);
+
+      return resultBlock(resolved, archs);
+    }
+
+    async function check() {
+      const lines = document.getElementById("model-input").value
+        .split("\n").map(l => l.trim()).filter(Boolean);
+      if (!lines.length) return;
+
+      const btn = document.getElementById("check-btn");
+      btn.disabled = true;
+      setResult(`<span class="spinner"></span> Checking...`);
+
+      try {
+        if (!cache) await loadCache();
+
+        const blocks = await Promise.all(lines.map(async line => {
+          try {
+            return await checkOne(line);
+          } catch (err) {
+            return `<div class="model-block">
+              <div class="model-label">${line}</div>
+              <p class="error">${err.message}</p>
+            </div>`;
+          }
+        }));
+
+        const builtAt = cache.built_at
+          ? new Date(cache.built_at).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })
+          : "unknown";
+
+        setResult(`${blocks.join("")}<p class="meta">Cache last updated ${builtAt}</p>`);
+      } catch (err) {
+        setResult(`<p class="error">${err.message}</p>`);
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    document.getElementById("check-btn").addEventListener("click", check);
+    document.getElementById("model-input").addEventListener("keydown", e => {
+      if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) check();
+    });
+
+    // Preload cache in background
+    loadCache().catch(() => {});
+  </script>
+</body>
+</html>
