@@ -19,7 +19,6 @@ import requests
 
 VLLM_REPO = "vllm-project/vllm"
 CACHE_FILE = "vllm_cache.json"
-MIN_VERSION = (0, 9, 2)  # ignore releases older than this
 
 # Try registry.py first (introduced ~v0.8+), fall back to __init__.py
 REGISTRY_PATHS = [
@@ -81,8 +80,8 @@ def version_sort_key(release):
 def build_cache(token=None):
     print("Fetching vLLM releases from GitHub...")
     all_releases = sorted(get_all_releases(token), key=version_sort_key)
-    releases = [r for r in all_releases if version_tuple(r["tag_name"]) >= MIN_VERSION]
-    print(f"Found {len(all_releases)} releases, {len(releases)} at or after v{'.'.join(map(str, MIN_VERSION))}\n")
+    releases = all_releases
+    print(f"Found {len(all_releases)} releases\n")
 
     # Load existing cache for incremental updates
     arch_first_seen, already_checked = {}, set()
