@@ -28,7 +28,7 @@ REGISTRY_PATHS = [
 
 # Matches HuggingFace architecture class names (dict keys in vLLM registry files)
 ARCH_RE = re.compile(
-    r'"([A-Z][a-zA-Z0-9]+'
+    r'"([A-Z][a-zA-Z0-9_]+'
     r'(?:ForCausalLM|ForConditionalGeneration|ForSeq2SeqLM'
     r'|ForTokenClassification|ForSequenceClassification'
     r'|ForImageTextToText|ForSpeechSeq2Seq|ForVision2Seq|ForMaskedLM|Model))"'
