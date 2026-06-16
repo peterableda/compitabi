@@ -241,7 +241,11 @@
           ? new Date(cache.built_at).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })
           : "unknown";
 
-        setResult(`${blocks.join("")}<p class="meta">Cache last updated ${builtAt}</p>`);
+        const versions = cache.vllm_versions_checked ?? [];
+        const latestVersion = versions.length ? versions[versions.length - 1] : null;
+        const versionNote = latestVersion ? ` · latest checked: ${latestVersion}` : "";
+
+        setResult(`${blocks.join("")}<p class="meta">Cache last updated ${builtAt}${versionNote}</p>`);
       } catch (err) {
         setResult(`<p class="error">${err.message}</p>`);
       } finally {
