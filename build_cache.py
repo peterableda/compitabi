@@ -92,7 +92,7 @@ def build_cache(token=None):
         already_checked = set(old.get("vllm_versions_checked", []))
         print(f"Existing cache: {len(arch_first_seen)} architectures, {len(already_checked)} versions checked\n")
 
-    versions_checked = list(already_checked)
+    new_versions_checked = []
 
     for release in releases:
         tag = release["tag_name"]
@@ -109,7 +109,7 @@ def build_cache(token=None):
 
         if not content:
             print("no registry file found, skipping")
-            versions_checked.append(tag)
+            new_versions_checked.append(tag)
             time.sleep(0.05)
             continue
 
@@ -117,20 +117,26 @@ def build_cache(token=None):
         new_archs = [a for a in archs if a not in arch_first_seen]
         for a in new_archs:
             arch_first_seen[a] = tag
-        versions_checked.append(tag)
+        new_versions_checked.append(tag)
 
         print(f"{len(archs)} architectures ({len(new_archs)} new)")
         time.sleep(0.05)
 
+    if not new_versions_checked:
+        print("\nCache is already up to date, nothing to do.")
+        return
+
+    all_versions_checked = sorted(already_checked | set(new_versions_checked), key=version_tuple)
+
     cache = {
         "built_at": datetime.now(timezone.utc).isoformat(),
-        "vllm_versions_checked": versions_checked,
+        "vllm_versions_checked": all_versions_checked,
         "architectures": arch_first_seen,
     }
     with open(CACHE_FILE, "w") as f:
         json.dump(cache, f, indent=2, sort_keys=True)
 
-    print(f"\nSaved {len(arch_first_seen)} architectures across {len(versions_checked)} versions -> {CACHE_FILE}")
+    print(f"\nSaved {len(arch_first_seen)} architectures across {len(all_versions_checked)} versions -> {CACHE_FILE}")
 
 
 if __name__ == "__main__":
